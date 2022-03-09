@@ -1,13 +1,26 @@
-#!/bin/bash
-wall $'#Architecture: ' `hostnamectl | grep "Operating System" | cut -d ' ' -f5- ` `awk -F':' '/^model name/ {print $2}' /proc/cpuinfo | uniq | sed -e 's/^[ \t]*//'` `arch` \
-$'\n#CPU physical: '`cat /proc/cpuinfo | grep processor | wc -l` \
-$'\n#vCPU:  '`cat /proc/cpuinfo | grep processor | wc -l` \
-$'\n'`free -m | awk 'NR==2{printf "#Memory Usage: %s/%sMB (%.2f%%)", $3,$2,$3*100/$2 }'` \
-$'\n'`df -h | awk '$NF=="/"{printf "#Disk Usage: %d/%dGB (%s)", $3,$2,$5}'` \
-$'\n'`top -bn1 | grep load | awk '{printf "#CPU Load: %.2f\n", $(NF-2)}'` \
-$'\n#Last boot: ' `who -b | awk '{print $3" "$4" "$5}'` \
-$'\n#LVM use: ' `lsblk |grep lvm | awk '{if ($1) {print "yes";exit;} else {print "no"} }'` \
-$'\n#Connection TCP:' `netstat -an | grep ESTABLISHED |  wc -l` \
-$'\n#User log: ' `who | cut -d " " -f 1 | sort -u | wc -l` \
-$'\nNetwork: IP ' `hostname -I`"("`ip a | grep link/ether | awk '{print $2}'`")" \
-$'\n#Sudo:  ' `grep 'sudo ' /var/log/auth.log | wc -l`
+THREADS=$(lscpu | egrep 'Thread|Core|Socket|^CPU' | awk '{if(NR == 3) print $NF}')
+CORES=$(lscpu | egrep 'Thread|Core|Socket|^CPU' | awk '{if(NR == 4) print $NF}')
+SOCKETS=$(lscpu | egrep 'Thread|Core|Socket|^CPU' | awk '{if(NR == 5) print $NF}')
+
+TOTAL_MEMORY=$(vmstat -s | awk '{if(NR == 1) print$1}')
+USED_MEMORY=$(vmstat -s | awk '{if(NR == 2) print$1}')
+USED_MEMORY_PERCENT=$(expr $USED_MEMORY \* 100 / $TOTAL_MEMORY)
+
+CPU_IDLE=$(mpstat | awk 'END{print $NF}')
+
+TOTAL_DISK_SIZE=$(df -h --total --output=size| awk 'END{print$NF}')
+USED_DISK_SIZE=$(df -h --total --output=used | awk 'END{print$NF}')
+USED_DISK_PERCENT=$(df -h --total | awk 'END{print$(NF - 1)}')
+
+printf "#Architecture: `uname -a` \n"
+printf "#CPU physical: `nproc` \n"
+printf "#vCPU: `expr $THREADS \* $CORES \* $SOCKETS` \n"
+printf "#Memory Usage: `expr $USED_MEMORY / 1024`/`expr $TOTAL_MEMORY / 1024`MB ($USED_MEMORY_PERCENT%%) \n"
+printf "#Disk Usage: $USED_DISK_SIZE/$TOTAL_DISK_SIZE ($USED_DISK_PERCENT%)\n"
+printf "#CPU Load: `echo 100 - $CPU_IDLE | bc`%% \n"
+printf "#Last Boot: `who -b | awk '{print $(NF - 1), $NF}'` \n"
+printf "#LVM use: yes \n"
+printf "#Connexions TCP: `netstat -ant | grep ESTABLISHED | wc -l` ESTABLISHED \n"
+printf "#User Log: `who | wc -l` \n"
+printf "#Network: IP `hostname -I` (`ip addr | grep link/ether | awk '{print $(NF -2)}'`) \n"
+printf "#Sudo: `cat /var/log/sudo/sudo_logs | grep COMMAND | wc -l` cmd"
